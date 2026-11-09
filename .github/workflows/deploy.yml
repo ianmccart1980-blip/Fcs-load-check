@@ -1,0 +1,55 @@
+name: Put FCS Load Check live
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Get the app
+        uses: actions/checkout@v5
+        with:
+          repository: mccart1980/Optimal-8-fuel
+          ref: fcs-load-check
+
+      - name: Is this version already live
+        id: check
+        run: |
+          live=$(curl -fsSL "https://ianmccart1980-blip.github.io/fcs-load-check/version.txt" || true)
+          if [ "$live" = "$(cat site/version.txt)" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "skip=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Pages
+        if: steps.check.outputs.skip != 'yes'
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload the site
+        if: steps.check.outputs.skip != 'yes'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Put it live
+        if: steps.check.outputs.skip != 'yes'
+        id: deployment
+        uses: actions/deploy-pages@v4
